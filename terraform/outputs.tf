@@ -12,3 +12,8 @@ output "lambda_iam_policy_json" {
   description = "IAM policy JSON for Lambda functions to access the counter table"
   value       = module.dynamodb.lambda_iam_policy_json
 }
+
+output "ecr_repository_url" {
+  description = "URL of the ECR repository"
+  value       = module.ecr.repository_url
+}

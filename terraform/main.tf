@@ -19,3 +19,11 @@ module "dynamodb" {
   table_name = var.table_name
   tags       = var.tags
 }
+
+module "ecr" {
+  source = "./modules/ecr"
+
+  repository_name = var.ecr_repository_name
+  image_limit     = var.ecr_image_limit
+  tags            = var.tags
+}
