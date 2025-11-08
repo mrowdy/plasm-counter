@@ -17,3 +17,8 @@ output "ecr_repository_url" {
   description = "URL of the ECR repository"
   value       = module.ecr.repository_url
 }
+
+output "api_gateway_url" {
+  description = "Base URL of the deployed API Gateway"
+  value       = module.lambda.api_gateway_url
+}
