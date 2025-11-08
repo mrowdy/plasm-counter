@@ -92,3 +92,13 @@ aws lambda invoke --function-name plasm-decrement --region eu-central-1 response
 - `handlers/getCount.handler` - GET /count
 - `handlers/increment.handler` - POST /increment
 - `handlers/decrement.handler` - POST /decrement
+
+## Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run linter
+npm run lint
+```
