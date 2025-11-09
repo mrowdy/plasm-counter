@@ -13,6 +13,15 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Data sources to reference state backend resources
+data "aws_s3_bucket" "terraform_state" {
+  bucket = "plasm-counter-tfstate-263867317840"
+}
+
+data "aws_dynamodb_table" "terraform_lock" {
+  name = "plasm-counter-terraform-lock"
+}
+
 module "dynamodb" {
   source = "./modules/dynamodb"
 
@@ -51,4 +60,19 @@ module "frontend" {
   bucket_name_prefix     = var.frontend_bucket_prefix
   cloudfront_price_class = var.cloudfront_price_class
   tags                   = var.tags
+}
+
+module "github_actions" {
+  source = "./modules/github-actions"
+
+  user_name                    = "github-actions-plasm-backend"
+  ecr_repository_arn           = module.ecr.repository_arn
+  lambda_function_arns         = module.lambda.function_arns
+  frontend_s3_bucket_arn       = module.frontend.s3_bucket_arn
+  cloudfront_distribution_arn  = module.frontend.cloudfront_distribution_arn
+  terraform_state_bucket_arn   = data.aws_s3_bucket.terraform_state.arn
+  terraform_lock_table_arn     = data.aws_dynamodb_table.terraform_lock.arn
+  tags                         = var.tags
+
+  depends_on = [module.ecr, module.lambda, module.frontend]
 }

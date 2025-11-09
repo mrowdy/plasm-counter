@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 env:
   AWS_REGION: eu-central-1
@@ -87,6 +88,29 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
+      # Get Lambda function names from Terraform state
+      - name: Get Terraform outputs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: terraform-outputs
+        run: |
+          # Download terraform state from S3
+          aws s3 cp s3://plasm-counter-tfstate-263867317840/terraform.tfstate terraform.tfstate
+
+          # Extract Lambda function names using jq
+          LAMBDA_GET_COUNT=$(cat terraform.tfstate | jq -r '.outputs.lambda_function_names.value.get_count')
+          LAMBDA_INCREMENT=$(cat terraform.tfstate | jq -r '.outputs.lambda_function_names.value.increment')
+          LAMBDA_DECREMENT=$(cat terraform.tfstate | jq -r '.outputs.lambda_function_names.value.decrement')
+
+          # Set outputs
+          echo "lambda_get_count=$LAMBDA_GET_COUNT" >> $GITHUB_OUTPUT
+          echo "lambda_increment=$LAMBDA_INCREMENT" >> $GITHUB_OUTPUT
+          echo "lambda_decrement=$LAMBDA_DECREMENT" >> $GITHUB_OUTPUT
+
+          # Display values
+          echo "Lambda get-count: $LAMBDA_GET_COUNT"
+          echo "Lambda increment: $LAMBDA_INCREMENT"
+          echo "Lambda decrement: $LAMBDA_DECREMENT"
+
       # Update Lambda functions
       - name: Update Lambda functions
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -100,19 +124,19 @@ jobs:
 
           # Update get-count Lambda
           aws lambda update-function-code \
-            --function-name plasm-get-count \
+            --function-name ${{ steps.terraform-outputs.outputs.lambda_get_count }} \
             --image-uri $IMAGE_URI \
             --region $AWS_REGION
 
           # Update increment Lambda
           aws lambda update-function-code \
-            --function-name plasm-increment \
+            --function-name ${{ steps.terraform-outputs.outputs.lambda_increment }} \
             --image-uri $IMAGE_URI \
             --region $AWS_REGION
 
           # Update decrement Lambda
           aws lambda update-function-code \
-            --function-name plasm-decrement \
+            --function-name ${{ steps.terraform-outputs.outputs.lambda_decrement }} \
             --image-uri $IMAGE_URI \
             --region $AWS_REGION
 
@@ -126,13 +150,13 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           echo "=========================================="
-          echo "Deployment Summary"
+          echo "Backend Deployment Summary"
           echo "=========================================="
           echo "Image URI: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
           echo "Commit SHA: $IMAGE_TAG"
           echo "Updated Lambda Functions:"
-          echo "  - plasm-get-count"
-          echo "  - plasm-increment"
-          echo "  - plasm-decrement"
+          echo "  - ${{ steps.terraform-outputs.outputs.lambda_get_count }}"
+          echo "  - ${{ steps.terraform-outputs.outputs.lambda_increment }}"
+          echo "  - ${{ steps.terraform-outputs.outputs.lambda_decrement }}"
           echo "Region: $AWS_REGION"
           echo "=========================================="

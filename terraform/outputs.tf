@@ -23,6 +23,11 @@ output "api_gateway_url" {
   value       = module.lambda.api_gateway_url
 }
 
+output "lambda_function_names" {
+  description = "Names of Lambda functions"
+  value       = module.lambda.function_names
+}
+
 output "frontend_s3_bucket_name" {
   description = "Name of the S3 bucket hosting the frontend"
   value       = module.frontend.s3_bucket_name
