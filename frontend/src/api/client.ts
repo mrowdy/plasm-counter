@@ -22,9 +22,11 @@ export class ApiError extends Error {
     this.errorCode = errorCode;
     this.timestamp = new Date();
 
-    if (typeof (Error as any).captureStackTrace === 'function') {
-      (Error as any).captureStackTrace(this, ApiError);
-    }
+    // Capture stack trace (V8/Node.js specific)
+    const ErrorWithStackTrace = Error as unknown as {
+      captureStackTrace?: (target: object, constructor: typeof ApiError) => void;
+    };
+    ErrorWithStackTrace.captureStackTrace?.(this, ApiError);
   }
 
   isBoundaryError(): boolean {

@@ -145,7 +145,11 @@ export const useCounterStore = create<CounterStore>((set, get) => ({
       };
 
       visibilityChangeHandler = () => {
-        document.visibilityState === 'visible' ? startPolling() : stopPolling();
+        if (document.visibilityState === 'visible') {
+          startPolling();
+        } else {
+          stopPolling();
+        }
       };
 
       document.addEventListener('visibilitychange', visibilityChangeHandler);
