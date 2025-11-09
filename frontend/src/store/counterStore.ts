@@ -7,6 +7,7 @@ interface CounterState {
   error: string | null;
   isPolling: boolean;
   isSyncing: boolean;
+  hasPendingUpdate: boolean;
 }
 
 interface CounterActions {
@@ -62,12 +63,14 @@ async function performUpdate(
   const previousValue = currentValue;
 
   try {
-    set({ value: currentValue + delta, loading: true, error: null });
+    set({ value: currentValue + delta, loading: true, error: null, hasPendingUpdate: true });
     const newValue = await apiCall();
     set({ value: newValue, loading: false });
   } catch (error) {
     set({ value: previousValue, error: getErrorMessage(error), loading: false });
     console.error('Counter update failed:', error);
+  } finally {
+    set({ hasPendingUpdate: false });
   }
 }
 
@@ -77,6 +80,7 @@ export const useCounterStore = create<CounterStore>((set, get) => ({
   error: null,
   isPolling: false,
   isSyncing: false,
+  hasPendingUpdate: false,
 
   fetchCount: async () => {
     try {
@@ -118,6 +122,10 @@ export const useCounterStore = create<CounterStore>((set, get) => ({
       set({ isPolling: true });
 
       const syncValue = async () => {
+        if (get().hasPendingUpdate) {
+          return;
+        }
+
         try {
           set({ isSyncing: true });
           const value = await getCount();
