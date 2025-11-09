@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getCount } from '../api/client';
 
 interface CounterState {
   value: number;
@@ -29,8 +30,15 @@ export const useCounterStore = create<CounterStore>((set, get) => ({
   isSyncing: false,
 
   fetchCount: async () => {
-    // Dummy implementation - just keeps current value
-    set({ loading: false, error: null });
+    try {
+      set({ loading: true, error: null });
+      const value = await getCount();
+      set({ value, loading: false });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch counter value';
+      set({ error: errorMessage, loading: false });
+      console.error('Failed to fetch counter value:', error);
+    }
   },
 
   increment: async () => {
@@ -56,7 +64,6 @@ export const useCounterStore = create<CounterStore>((set, get) => ({
   },
 
   setPolling: (enabled: boolean) => {
-    // Dummy implementation - no actual polling
     set({ isPolling: enabled, isSyncing: false });
   },
 
