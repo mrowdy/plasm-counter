@@ -70,13 +70,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Set API Gateway URL from GitHub variable
+      # Set API Gateway URL from GitHub secret
       - name: Set API Gateway URL
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: get-api-url
         run: |
-          echo "api_url=${{ vars.API_GATEWAY_URL }}" >> $GITHUB_OUTPUT
-          echo "API Gateway URL: ${{ vars.API_GATEWAY_URL }}"
+          echo "api_url=${{ secrets.API_GATEWAY_URL }}" >> $GITHUB_OUTPUT
+          echo "API Gateway URL: ${{ secrets.API_GATEWAY_URL }}"
 
       # Build frontend with production API URL
       - name: Build frontend (production)
@@ -91,15 +91,15 @@ jobs:
           echo "Building with API URL: $VITE_API_BASE_URL"
           npm run build
 
-      # Set S3 bucket name and CloudFront distribution ID from GitHub variables
+      # Set S3 bucket name and CloudFront distribution ID from GitHub secrets
       - name: Set S3 and CloudFront info
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: get-infra
         run: |
-          echo "s3_bucket=${{ vars.S3_BUCKET_NAME }}" >> $GITHUB_OUTPUT
-          echo "cf_dist_id=${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_OUTPUT
-          echo "S3 Bucket: ${{ vars.S3_BUCKET_NAME }}"
-          echo "CloudFront Distribution ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}"
+          echo "s3_bucket=${{ secrets.S3_BUCKET_NAME }}" >> $GITHUB_OUTPUT
+          echo "cf_dist_id=${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_OUTPUT
+          echo "S3 Bucket: ${{ secrets.S3_BUCKET_NAME }}"
+          echo "CloudFront Distribution ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}"
 
       # Sync files to S3
       - name: Sync files to S3
@@ -139,12 +139,12 @@ jobs:
           echo "CloudFront invalidation created: $INVALIDATION_ID"
           echo "✅ CloudFront cache invalidated successfully"
 
-      # Set frontend URL from GitHub variable
+      # Set frontend URL from GitHub secret
       - name: Set Frontend URL
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: get-url
         run: |
-          echo "frontend_url=${{ vars.FRONTEND_URL }}" >> $GITHUB_OUTPUT
+          echo "frontend_url=${{ secrets.FRONTEND_URL }}" >> $GITHUB_OUTPUT
 
       # Deployment summary
       - name: Deployment Summary
