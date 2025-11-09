@@ -40,10 +40,27 @@ export class ApiError extends Error {
   }
 }
 
+interface RetryConfig {
+  maxRetries: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
+}
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 2000,
+  backoffMultiplier: 2,
+};
+
 class ApiClient {
   private client: AxiosInstance;
+  private retryConfig: RetryConfig;
 
-  constructor(baseURL: string) {
+  constructor(baseURL: string, retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG) {
+    this.retryConfig = retryConfig;
+
     this.client = axios.create({
       baseURL,
       timeout: 10000,
@@ -81,19 +98,67 @@ class ApiClient {
     throw new ApiError(0, 'UnknownError', error.message || 'An unexpected error occurred');
   }
 
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private getRetryDelay(attemptNumber: number): number {
+    const delay = this.retryConfig.initialDelayMs * Math.pow(this.retryConfig.backoffMultiplier, attemptNumber);
+    return Math.min(delay, this.retryConfig.maxDelayMs);
+  }
+
+  private isRetryableError(error: ApiError): boolean {
+    return error.isNetworkError() || error.isConcurrentConflict() || (error.statusCode >= 500 && error.statusCode < 600);
+  }
+
+  private async executeWithRetry<T>(operation: () => Promise<T>, operationName: string): Promise<T> {
+    let lastError: ApiError | null = null;
+
+    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!(error instanceof ApiError)) {
+          throw error;
+        }
+
+        lastError = error;
+
+        if (!this.isRetryableError(error) || attempt >= this.retryConfig.maxRetries) {
+          if (attempt >= this.retryConfig.maxRetries) {
+            console.error(`${operationName} failed after ${this.retryConfig.maxRetries} retries:`, error.message);
+          }
+          throw error;
+        }
+
+        const delay = this.getRetryDelay(attempt);
+        console.warn(`${operationName} failed (attempt ${attempt + 1}/${this.retryConfig.maxRetries + 1}): ${error.message}. Retrying in ${delay}ms...`);
+        await this.sleep(delay);
+      }
+    }
+
+    throw lastError || new ApiError(0, 'UnknownError', 'Retry logic failed unexpectedly');
+  }
+
   async getCount(): Promise<number> {
-    const response = await this.client.get<CounterResponse>('/count');
-    return response.data.value;
+    return this.executeWithRetry(async () => {
+      const response = await this.client.get<CounterResponse>('/count');
+      return response.data.value;
+    }, 'getCount');
   }
 
   async increment(): Promise<number> {
-    const response = await this.client.post<CounterResponse>('/increment');
-    return response.data.value;
+    return this.executeWithRetry(async () => {
+      const response = await this.client.post<CounterResponse>('/increment');
+      return response.data.value;
+    }, 'increment');
   }
 
   async decrement(): Promise<number> {
-    const response = await this.client.post<CounterResponse>('/decrement');
-    return response.data.value;
+    return this.executeWithRetry(async () => {
+      const response = await this.client.post<CounterResponse>('/decrement');
+      return response.data.value;
+    }, 'decrement');
   }
 }
 
