@@ -1,0 +1,184 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci-cd.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-ci-cd.yml'
+
+env:
+  AWS_REGION: eu-central-1
+  WORKING_DIRECTORY: ./frontend
+  NODE_VERSION: '18'
+
+jobs:
+  ci-cd:
+    name: Test, Build & Deploy Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+    steps:
+      # Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Node.js with caching
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # Run linter
+      - name: Run ESLint
+        run: npm run lint
+
+      # Run type check
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      # Build (for PR validation - not deployed)
+      - name: Build frontend (validation)
+        if: github.event_name == 'pull_request'
+        env:
+          VITE_API_BASE_URL: https://example.com/prod
+        run: npm run build
+
+      # ===== CD Steps (only on main branch) =====
+
+      # Configure AWS credentials
+      - name: Configure AWS credentials
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Get Terraform outputs for API Gateway URL
+      - name: Get API Gateway URL
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: get-api-url
+        run: |
+          cd ../terraform
+          API_URL=$(terraform output -raw api_gateway_url 2>/dev/null || echo "")
+          if [ -z "$API_URL" ]; then
+            echo "Warning: Could not get API Gateway URL from Terraform. Using placeholder."
+            API_URL="https://placeholder-api-url.execute-api.eu-central-1.amazonaws.com/prod"
+          fi
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          echo "API Gateway URL: $API_URL"
+
+      # Build frontend with production API URL
+      - name: Build frontend (production)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          VITE_API_BASE_URL: ${{ steps.get-api-url.outputs.api_url }}
+          VITE_MAX_RETRIES: 3
+          VITE_INITIAL_DELAY_MS: 100
+          VITE_MAX_DELAY_MS: 2000
+          VITE_BACKOFF_MULTIPLIER: 2
+        run: |
+          echo "Building with API URL: $VITE_API_BASE_URL"
+          npm run build
+
+      # Get S3 bucket name and CloudFront distribution ID
+      - name: Get S3 and CloudFront info
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: get-infra
+        run: |
+          cd ../terraform
+          S3_BUCKET=$(terraform output -raw frontend_s3_bucket_name 2>/dev/null || echo "")
+          CF_DIST_ID=$(terraform output -raw frontend_cloudfront_distribution_id 2>/dev/null || echo "")
+
+          if [ -z "$S3_BUCKET" ] || [ -z "$CF_DIST_ID" ]; then
+            echo "Error: Could not get S3 bucket or CloudFront distribution ID from Terraform."
+            echo "Please ensure Terraform infrastructure is deployed first."
+            exit 1
+          fi
+
+          echo "s3_bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
+          echo "cf_dist_id=$CF_DIST_ID" >> $GITHUB_OUTPUT
+          echo "S3 Bucket: $S3_BUCKET"
+          echo "CloudFront Distribution ID: $CF_DIST_ID"
+
+      # Sync files to S3
+      - name: Sync files to S3
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          aws s3 sync dist/ s3://${{ steps.get-infra.outputs.s3_bucket }} \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable" \
+            --exclude "index.html" \
+            --exclude "*.json"
+
+          # Upload index.html and manifest files with shorter cache
+          aws s3 cp dist/index.html s3://${{ steps.get-infra.outputs.s3_bucket }}/index.html \
+            --cache-control "public,max-age=0,must-revalidate"
+
+          # Upload JSON files if they exist
+          if ls dist/*.json 1> /dev/null 2>&1; then
+            aws s3 cp dist/ s3://${{ steps.get-infra.outputs.s3_bucket }}/ \
+              --recursive \
+              --exclude "*" \
+              --include "*.json" \
+              --cache-control "public,max-age=0,must-revalidate"
+          fi
+
+          echo "✅ Files synced to S3 successfully"
+
+      # Invalidate CloudFront cache
+      - name: Invalidate CloudFront cache
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.get-infra.outputs.cf_dist_id }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+
+          echo "CloudFront invalidation created: $INVALIDATION_ID"
+          echo "✅ CloudFront cache invalidated successfully"
+
+      # Get frontend URL
+      - name: Get Frontend URL
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: get-url
+        run: |
+          cd ../terraform
+          FRONTEND_URL=$(terraform output -raw frontend_website_url 2>/dev/null || echo "")
+          echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+
+      # Deployment summary
+      - name: Deployment Summary
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "=========================================="
+          echo "Frontend Deployment Summary"
+          echo "=========================================="
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "API Gateway URL: ${{ steps.get-api-url.outputs.api_url }}"
+          echo "S3 Bucket: ${{ steps.get-infra.outputs.s3_bucket }}"
+          echo "CloudFront Distribution: ${{ steps.get-infra.outputs.cf_dist_id }}"
+          echo "Frontend URL: ${{ steps.get-url.outputs.frontend_url }}"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "=========================================="
+          echo ""
+          echo "🎉 Frontend deployed successfully!"
+          echo "Visit: ${{ steps.get-url.outputs.frontend_url }}"
+          echo "=========================================="
