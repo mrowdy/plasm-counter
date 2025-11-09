@@ -44,3 +44,11 @@ module "lambda" {
 
   depends_on = [module.ecr, module.dynamodb]
 }
+
+module "frontend" {
+  source = "./modules/frontend"
+
+  bucket_name_prefix     = var.frontend_bucket_prefix
+  cloudfront_price_class = var.cloudfront_price_class
+  tags                   = var.tags
+}

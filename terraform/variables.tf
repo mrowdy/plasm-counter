@@ -51,3 +51,15 @@ variable "lambda_memory_size" {
   type        = number
   default     = 256
 }
+
+variable "frontend_bucket_prefix" {
+  description = "Prefix for the frontend S3 bucket name"
+  type        = string
+  default     = "plasm-counter"
+}
+
+variable "cloudfront_price_class" {
+  description = "CloudFront price class (PriceClass_All, PriceClass_200, PriceClass_100)"
+  type        = string
+  default     = "PriceClass_100"
+}

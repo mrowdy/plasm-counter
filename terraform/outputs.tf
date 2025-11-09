@@ -22,3 +22,18 @@ output "api_gateway_url" {
   description = "Base URL of the deployed API Gateway"
   value       = module.lambda.api_gateway_url
 }
+
+output "frontend_s3_bucket_name" {
+  description = "Name of the S3 bucket hosting the frontend"
+  value       = module.frontend.s3_bucket_name
+}
+
+output "frontend_cloudfront_distribution_id" {
+  description = "ID of the CloudFront distribution"
+  value       = module.frontend.cloudfront_distribution_id
+}
+
+output "frontend_website_url" {
+  description = "Full HTTPS URL of the frontend website"
+  value       = module.frontend.website_url
+}
