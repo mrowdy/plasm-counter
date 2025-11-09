@@ -47,18 +47,20 @@ interface RetryConfig {
   backoffMultiplier: number;
 }
 
-const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxRetries: 3,
-  initialDelayMs: 100,
-  maxDelayMs: 2000,
-  backoffMultiplier: 2,
-};
+function getRetryConfigFromEnv(): RetryConfig {
+  return {
+    maxRetries: Number(import.meta.env.VITE_MAX_RETRIES) || 3,
+    initialDelayMs: Number(import.meta.env.VITE_INITIAL_DELAY_MS) || 100,
+    maxDelayMs: Number(import.meta.env.VITE_MAX_DELAY_MS) || 2000,
+    backoffMultiplier: Number(import.meta.env.VITE_BACKOFF_MULTIPLIER) || 2,
+  };
+}
 
 class ApiClient {
   private client: AxiosInstance;
   private retryConfig: RetryConfig;
 
-  constructor(baseURL: string, retryConfig: RetryConfig = DEFAULT_RETRY_CONFIG) {
+  constructor(baseURL: string, retryConfig: RetryConfig = getRetryConfigFromEnv()) {
     this.retryConfig = retryConfig;
 
     this.client = axios.create({
