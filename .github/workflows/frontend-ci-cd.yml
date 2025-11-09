@@ -70,19 +70,13 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Get Terraform outputs for API Gateway URL
-      - name: Get API Gateway URL
+      # Set API Gateway URL from GitHub variable
+      - name: Set API Gateway URL
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: get-api-url
         run: |
-          cd ../terraform
-          API_URL=$(terraform output -raw api_gateway_url 2>/dev/null || echo "")
-          if [ -z "$API_URL" ]; then
-            echo "Warning: Could not get API Gateway URL from Terraform. Using placeholder."
-            API_URL="https://placeholder-api-url.execute-api.eu-central-1.amazonaws.com/prod"
-          fi
-          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
-          echo "API Gateway URL: $API_URL"
+          echo "api_url=${{ vars.API_GATEWAY_URL }}" >> $GITHUB_OUTPUT
+          echo "API Gateway URL: ${{ vars.API_GATEWAY_URL }}"
 
       # Build frontend with production API URL
       - name: Build frontend (production)
@@ -97,25 +91,15 @@ jobs:
           echo "Building with API URL: $VITE_API_BASE_URL"
           npm run build
 
-      # Get S3 bucket name and CloudFront distribution ID
-      - name: Get S3 and CloudFront info
+      # Set S3 bucket name and CloudFront distribution ID from GitHub variables
+      - name: Set S3 and CloudFront info
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: get-infra
         run: |
-          cd ../terraform
-          S3_BUCKET=$(terraform output -raw frontend_s3_bucket_name 2>/dev/null || echo "")
-          CF_DIST_ID=$(terraform output -raw frontend_cloudfront_distribution_id 2>/dev/null || echo "")
-
-          if [ -z "$S3_BUCKET" ] || [ -z "$CF_DIST_ID" ]; then
-            echo "Error: Could not get S3 bucket or CloudFront distribution ID from Terraform."
-            echo "Please ensure Terraform infrastructure is deployed first."
-            exit 1
-          fi
-
-          echo "s3_bucket=$S3_BUCKET" >> $GITHUB_OUTPUT
-          echo "cf_dist_id=$CF_DIST_ID" >> $GITHUB_OUTPUT
-          echo "S3 Bucket: $S3_BUCKET"
-          echo "CloudFront Distribution ID: $CF_DIST_ID"
+          echo "s3_bucket=${{ vars.S3_BUCKET_NAME }}" >> $GITHUB_OUTPUT
+          echo "cf_dist_id=${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_OUTPUT
+          echo "S3 Bucket: ${{ vars.S3_BUCKET_NAME }}"
+          echo "CloudFront Distribution ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}"
 
       # Sync files to S3
       - name: Sync files to S3
@@ -155,14 +139,12 @@ jobs:
           echo "CloudFront invalidation created: $INVALIDATION_ID"
           echo "✅ CloudFront cache invalidated successfully"
 
-      # Get frontend URL
-      - name: Get Frontend URL
+      # Set frontend URL from GitHub variable
+      - name: Set Frontend URL
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         id: get-url
         run: |
-          cd ../terraform
-          FRONTEND_URL=$(terraform output -raw frontend_website_url 2>/dev/null || echo "")
-          echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+          echo "frontend_url=${{ vars.FRONTEND_URL }}" >> $GITHUB_OUTPUT
 
       # Deployment summary
       - name: Deployment Summary
